@@ -1,0 +1,30 @@
+name: Deploy to VPS
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v3
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H 153.121.51.21 >> ~/.ssh/known_hosts
+
+      - name: SSH and Deploy
+        run: |
+          ssh age@153.121.51.21 << 'EOF'
+            cd /home/age/fassion-reco-be
+            git pull origin main
+            poetry install
+            sudo systemctl restart fassion-reco-be
+          EOF
