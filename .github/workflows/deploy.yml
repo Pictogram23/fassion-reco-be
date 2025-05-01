@@ -26,5 +26,5 @@ jobs:
             cd /home/age/fassion-reco-be
             git pull origin main
             poetry install
-            sudo systemctl restart fassion-reco-be
+            sudo systemctl restart fassion-reco-api
           EOF
