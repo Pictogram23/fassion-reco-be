@@ -9,7 +9,7 @@ class Coordinate(BaseModel):
     bottoms: list[int]
 
 
-@app.get("/")
+@app.post("/")
 def read_root(coordinate: Coordinate):
 
     r_top = coordinate.tops[0]
@@ -114,13 +114,15 @@ def read_root(coordinate: Coordinate):
     delta_b = b_top - b_bottom
 
     delta_Eab = ((delta_L)**2 + (delta_a)**2 + (delta_b)**2)**(1/2) 
-
+    
+    return {"result":delta_Eab}
     #判定
+    """
     if delta_Eab < 10:
         print("result=60点（同系色・控え目)")
     elif delta_Eab < 25:
         print("result=100点（調和の取れたコーデ)")
     else :
         print("result=50点（ポップな印象)")
-
+    """
    
