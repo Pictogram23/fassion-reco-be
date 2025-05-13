@@ -23,26 +23,21 @@ def read_root(coordinate: Coordinate):
         r_top_linear = ((r_top/255+0.055)/1.055)**2.4
 
     if g_top/255 <= 0.04045:
-        g_top_linear = (r_top/255)/12.92
+        g_top_linear = (g_top/255)/12.92
     else:
-        g_top_linear = ((r_top/255+0.055)/1.055)**2.4
+        g_top_linear = ((g_top/255+0.055)/1.055)**2.4
     
     if b_top/255 <= 0.04045:
-        b_top_linear = (r_top/255)/12.92
+        b_top_linear = (b_top/255)/12.92
     else:
-        b_top_linear = ((r_top/255+0.055)/1.055)**2.4
+        b_top_linear = ((b_top/255+0.055)/1.055)**2.4
     
     #リニアRGB値をXYZ値に変換する
     X_t = 0.4124*r_top_linear + 0.3576*g_top_linear + 0.1805*b_top_linear
     Y_t = 0.2126*r_top_linear + 0.7152*g_top_linear + 0.0722*b_top_linear
     Z_t = 0.0193*r_top_linear + 0.1192*g_top_linear + 0.9505*b_top_linear
 
-    #XYZ値をxyz値に変換する
-    x = X_t/(X_t+Y_t+Z_t)
-    y = Y_t/(X_t+Y_t+Z_t)
-    z = Z_t/(X_t+Y_t+Z_t)
-
-    #xyz値をLab値に変換する
+    #XYZ値をLab値に変換する
     Xn = 0.9505
     Yn = 1.0000
     Zn = 1.0890
@@ -78,28 +73,21 @@ def read_root(coordinate: Coordinate):
         r_bottom_linear = ((r_bottom/255+0.055)/1.055)**2.4
 
     if g_bottom/255 <= 0.04045:
-        g_bottom_linear = (r_bottom/255)/12.92
+        g_bottom_linear = (g_bottom/255)/12.92
     else:
-        g_bottom_linear = ((r_bottom/255+0.055)/1.055)**2.4
+        g_bottom_linear = ((g_bottom/255+0.055)/1.055)**2.4
     
     if b_bottom/255 <= 0.04045:
-        b_bottom_linear = (r_bottom/255)/12.92
+        b_bottom_linear = (b_bottom/255)/12.92
     else:
-        b_bottom_linear = ((r_bottom/255+0.055)/1.055)**2.4
+        b_bottom_linear = ((b_bottom/255+0.055)/1.055)**2.4
 
     #リニアRGB値をXYZ値に変換する
     X_b = 0.4124*r_bottom_linear + 0.3576*g_bottom_linear + 0.1805*b_bottom_linear
     Y_b = 0.2126*r_bottom_linear + 0.7152*g_bottom_linear + 0.0722*b_bottom_linear
     Z_b = 0.0193*r_bottom_linear + 0.1192*g_bottom_linear + 0.9505*b_bottom_linear
 
-    #XYZ値をxyz値に変換する
-    x_b = X_b/(X_b+Y_b+Z_b)
-    y_b = Y_b/(X_b+Y_b+Z_b)
-    z_b = Z_b/(X_b+Y_b+Z_b)
-
-    #xyz値をLab値に変換する
-   
-    
+    #XYZ値をLab値に変換する    
     fx = f(X_b/Xn)
     fy = f(Y_b/Yn)
     fz = f(Z_b/Zn)
