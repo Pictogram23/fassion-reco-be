@@ -1,9 +1,22 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from scipy.optimize import minimize
 import numpy as np
 
 app = FastAPI()
+
+origins = [
+    "http://localhost:3000",
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 class Coordinate(BaseModel):
@@ -69,7 +82,7 @@ def get_bottom_with_delta(coordinate:Coordinate):
     bottom_rgb = coordinate.bottoms
     recommend_bottom_rgb = find_bottom_rgb(top_rgb,target_delta_e = 25)
     actual_delta = delta_e(rgb_to_lab(np.array(top_rgb)),rgb_to_lab(recommend_bottom_rgb))
-    return {"result":round(actual_delta_3)}
+    return {"result":round(actual_delta)}
     # return {
     #     "top_rgb":top_rgb,
     #     "bottom_rgb":bottom_rgb,
