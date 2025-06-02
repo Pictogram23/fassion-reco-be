@@ -1,5 +1,7 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
+from scipy.optimize import minimize
+import numpy as np
 
 app = FastAPI()
 
@@ -8,34 +10,20 @@ class Coordinate(BaseModel):
     tops: list[int]
     bottoms: list[int]
 
+def rgb_to_lab(rgb):
+    def gamma_correct(c):
+        c = c/255
+        return c/12.92 if c <= 0.04045 else ((c+0.055)/1.055)**2.4
 
-@app.post("/")
-def read_root(coordinate: Coordinate):
-
-    r_top = coordinate.tops[0]
-    g_top = coordinate.tops[1]
-    b_top = coordinate.tops[2]
-
-    #RGB値をリニアRGB値に変換する
-    if r_top/255 <= 0.04045:
-        r_top_linear = (r_top/255)/12.92
-    else:
-        r_top_linear = ((r_top/255+0.055)/1.055)**2.4
-
-    if g_top/255 <= 0.04045:
-        g_top_linear = (g_top/255)/12.92
-    else:
-        g_top_linear = ((g_top/255+0.055)/1.055)**2.4
+    r_top = gamma_correct(rgb[0])
+    g_top = gamma_correct(rgb[1])
+    b_top = gamma_correct(rgb[2])
     
-    if b_top/255 <= 0.04045:
-        b_top_linear = (b_top/255)/12.92
-    else:
-        b_top_linear = ((b_top/255+0.055)/1.055)**2.4
     
     #リニアRGB値をXYZ値に変換する
-    X_t = 0.4124*r_top_linear + 0.3576*g_top_linear + 0.1805*b_top_linear
-    Y_t = 0.2126*r_top_linear + 0.7152*g_top_linear + 0.0722*b_top_linear
-    Z_t = 0.0193*r_top_linear + 0.1192*g_top_linear + 0.9505*b_top_linear
+    X_t = 0.4124*r_top + 0.3576*g_top + 0.1805*b_top
+    Y_t = 0.2126*r_top + 0.7152*g_top + 0.0722*b_top
+    Z_t = 0.0193*r_top + 0.1192*g_top + 0.9505*b_top
 
     #XYZ値をLab値に変換する
     Xn = 0.9505
@@ -50,7 +38,7 @@ def read_root(coordinate: Coordinate):
         if t > delta3:
             return t**(1/3)
         else:
-            return t*inv_3delta2+4/29
+            return t * inv_3delta2 + 4 / 29
     
     fx = f(X_t/Xn)
     fy = f(Y_t/Yn)
@@ -59,58 +47,36 @@ def read_root(coordinate: Coordinate):
     L_top = 116 * fy - 16
     a_top = 500 * (fx-fy)
     b_top = 200 * (fy-fz)
+    return np.array([L_top, a_top, b_top])
 
+def delta_e(lab1,lab2):
+    return np.linalg.norm(lab1-lab2)
 
-    #--------bottomsについて----------
-    r_bottom = coordinate.bottoms[0]
-    g_bottom = coordinate.bottoms[1]
-    b_bottom = coordinate.bottoms[2]
+def find_bottom_rgb(top_rgb,target_delta_e=25):
+        top_lab = rgb_to_lab(np.array(top_rgb))
 
-    #RGB値をリニアRGB値に変換する
-    if r_bottom/255 <= 0.04045:
-        r_bottom_linear = (r_bottom/255)/12.92
-    else:
-        r_bottom_linear = ((r_bottom/255+0.055)/1.055)**2.4
+        def objective(bottom_rgb):
+            bottom_rgb = np.clip(bottom_rgb,0,255)
+            bottom_lab = rgb_to_lab(bottom_rgb)
+            return abs(delta_e(top_lab,bottom_lab)-target_delta_e)
 
-    if g_bottom/255 <= 0.04045:
-        g_bottom_linear = (g_bottom/255)/12.92
-    else:
-        g_bottom_linear = ((g_bottom/255+0.055)/1.055)**2.4
+        res = minimize(objective, x0=[128, 128, 128], bounds=[(0, 255)]*3)
+        return np.clip(res.x.round(), 0, 255).astype(int).tolist()
+
+@app.post("/")
+def get_bottom_with_delta(coordinate:Coordinate):
+    top_rgb = coordinate.tops
+    bottom_rgb = coordinate.bottoms
+    recommend_bottom_rgb = find_bottom_rgb(top_rgb,target_delta_e = 25)
+    actual_delta = delta_e(rgb_to_lab(np.array(top_rgb)),rgb_to_lab(recommend_bottom_rgb))
+    return {"result":round(actual_delta_3)}
+    # return {
+    #     "top_rgb":top_rgb,
+    #     "bottom_rgb":bottom_rgb,
+    #     "recommend_bottom_rgb":recommend_bottom_rgb,
+    #     "delta_E":round(actual_delta,3),
+    #     "difference_from_25":round(abs(actual_delta-25),3)
+    # }
+
     
-    if b_bottom/255 <= 0.04045:
-        b_bottom_linear = (b_bottom/255)/12.92
-    else:
-        b_bottom_linear = ((b_bottom/255+0.055)/1.055)**2.4
-
-    #リニアRGB値をXYZ値に変換する
-    X_b = 0.4124*r_bottom_linear + 0.3576*g_bottom_linear + 0.1805*b_bottom_linear
-    Y_b = 0.2126*r_bottom_linear + 0.7152*g_bottom_linear + 0.0722*b_bottom_linear
-    Z_b = 0.0193*r_bottom_linear + 0.1192*g_bottom_linear + 0.9505*b_bottom_linear
-
-    #XYZ値をLab値に変換する    
-    fx = f(X_b/Xn)
-    fy = f(Y_b/Yn)
-    fz = f(Z_b/Zn)
-
-    L_bottom = 116 * fy - 16
-    a_bottom = 500 * (fx-fy)
-    b_bottom = 200 * (fy-fz)
-
-    #色差の計算
-    delta_L = L_top - L_bottom
-    delta_a = a_top - a_bottom
-    delta_b = b_top - b_bottom
-
-    delta_Eab = ((delta_L)**2 + (delta_a)**2 + (delta_b)**2)**(1/2) 
-    
-    return {"result":delta_Eab}
-    #判定
-    """
-    if delta_Eab < 10:
-        print("result=60点（同系色・控え目)")
-    elif delta_Eab < 25:
-        print("result=100点（調和の取れたコーデ)")
-    else :
-        print("result=50点（ポップな印象)")
-    """
    
