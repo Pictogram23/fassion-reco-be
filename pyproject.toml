@@ -10,6 +10,8 @@ package-mode = false
 python = "^3.10"
 fastapi = "^0.115.12"
 uvicorn = {extras = ["standard"], version = "^0.34.2"}
+numpy = "^2.2.6"
+scipy = "^1.15.3"
 
 
 [tool.poetry.group.dev.dependencies]
