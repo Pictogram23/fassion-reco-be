@@ -81,7 +81,7 @@ def get_bottom_with_delta(coordinate:Coordinate):
     top_rgb = coordinate.tops
     bottom_rgb = coordinate.bottoms
     recommend_bottom_rgb = find_bottom_rgb(top_rgb,target_delta_e = 25)
-    actual_delta = delta_e(rgb_to_lab(np.array(top_rgb)),rgb_to_lab(recommend_bottom_rgb))
+    actual_delta = delta_e(rgb_to_lab(np.array(top_rgb)),rgb_to_lab(bottom_rgb))
     return {"result":round(actual_delta)}
     # return {
     #     "top_rgb":top_rgb,
