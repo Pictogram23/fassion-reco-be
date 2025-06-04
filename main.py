@@ -83,6 +83,18 @@ def delta_e(lab1,lab2):
     delta_E = np.linalg.norm(lab1-lab2) 
     return delta_E
 
+#topから適したbottomを計算
+def find_bottom_rgb(top_rgb,target_delta_e=25):
+        top_lab = rgb_to_lab(np.array(top_rgb))
+        #色差が２５に近くなるようなbottomを出す関数
+        def objective(bottom_rgb):
+            bottom_rgb = np.clip(bottom_rgb,0,255)
+            bottom_lab = rgb_to_lab(bottom_rgb)
+            return abs(delta_e(top_lab,bottom_lab)-target_delta_e)
+
+        res = minimize(objective, x0=[128, 128, 128], bounds=[(0, 255)]*3)
+        return np.clip(res.x.round(), 0, 255).astype(int).tolist()
+
 #rgbからhslに変換
 def rgb_to_hsl(rgb):
     r, g, b = [x / 255.0 for x in rgb]
@@ -171,7 +183,7 @@ def get_bottom_with_delta(coordinate: Coordinate):
     else:
         comment = CommentModel.UNBALANCED
 
-    return {"result": round(actual_delta,2),
+    return {"score": round(actual_delta,2),
             "harmony":degree_of_harmony,
             "comment": comment
     }
