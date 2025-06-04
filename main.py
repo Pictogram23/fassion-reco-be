@@ -3,6 +3,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from scipy.optimize import minimize
 import numpy as np
+import colorsys
+import math
 
 app = FastAPI()
 
@@ -24,13 +26,17 @@ class Coordinate(BaseModel):
     bottoms: list[int]
 
 def rgb_to_lab(rgb):
+    r_normalized = rgb[0] / 255.0
+    g_normalized = rgb[1] / 255.0
+    b_normalized = rgb[2] / 255.0
+    
     #RGB値をリニアRGB値に変換する関数
     def gamma_correct(c):
         return c/12.92 if c <= 0.04045 else ((c+0.055)/1.055)**2.4
 
-    r_top = gamma_correct(rgb[0])
-    g_top = gamma_correct(rgb[1])
-    b_top = gamma_correct(rgb[2])
+    r_top = gamma_correct(r_normalized)
+    g_top = gamma_correct(g_normalized)
+    b_top = gamma_correct(b_normalized)
     
     
     #リニアRGB値をXYZ値に変換する
@@ -65,7 +71,8 @@ def rgb_to_lab(rgb):
     return np.array([L_top, a_top, b_top])
 #topとbottomのLabからdelta_e（色差）を算出
 def delta_e(lab1,lab2):
-    return np.linalg.norm(lab1-lab2)
+    delta_E = np.linalg.norm(lab1-lab2) 
+    return delta_E
 
 #topから適したbottomを計算
 def find_bottom_rgb(top_rgb,target_delta_e=25):
@@ -78,6 +85,77 @@ def find_bottom_rgb(top_rgb,target_delta_e=25):
 
         res = minimize(objective, x0=[128, 128, 128], bounds=[(0, 255)]*3)
         return np.clip(res.x.round(), 0, 255).astype(int).tolist()
+#rgbからhslに変換
+def rgb_to_hsl(rgb):
+    r, g, b = [x / 255.0 for x in rgb]
+    h, l, s = colorsys.rgb_to_hls(r, g, b)
+    return (h * 360, s, l)  # 色相を0-360度に変換
+
+#色相の関係から「組み合わせタイプ」を分類する
+
+def get_hue_difference(h1, h2):
+    diff = abs(h1 - h2)
+    return min(diff, 360 - diff)
+
+def determine_harmony_type(h1, h2):
+    diff = get_hue_difference(h1, h2)
+    if diff < 15:
+        #落ち着いた印象
+        return "monochrome"
+    elif diff <= 30:
+        #自然な一体感がある
+        return "analogous"
+    elif 150 <= diff <= 210:
+        #対比が強くてインパクト大
+        return "complementary"
+    elif abs(h1 - h2) % 120 < 15:
+        #多色でもバランスよい
+        return "triadic"
+    else:
+        return "neutral"
+
+        #調和タイプ別スコア
+harmony_scores = {
+    "monochrome": 85,
+    "analogous": 90,
+    "complementary": 75,
+    "triadic": 80,
+    "neutral": 60
+}
+# 彩度・明度のバランス評価（差が大きいと減点）
+def brightness_contrast_penalty(l1, l2, s1, s2):
+    brightness_diff = abs(l1 - l2)
+    saturation_diff = abs(s1 - s2)
+    penalty = (brightness_diff + saturation_diff) * 30  # 最大30点引き
+    return penalty
+def evaluate_color_pair(rgb1, rgb2):
+    # ΔEスコア（おしゃれ評価型）
+    delta = delta_e(rgb1, rgb2)
+    delta_score = delta_e_fashion_score(delta, ideal=20, width=10)  # 正規分布型
+
+    # HSL調和スコア
+    h1, s1, l1 = rgb_to_hsl(rgb1)
+    h2, s2, l2 = rgb_to_hsl(rgb2)
+    harmony_type = determine_harmony_type(h1, h2)
+    base_harmony = harmony_scores[harmony_type]
+    penalty = brightness_contrast_penalty(l1, l2, s1, s2)
+    harmony_score = max(0, base_harmony - penalty)
+
+    final_score = round(0.4 * delta_score + 0.6 * harmony_score, 1)
+    return final_score
+
+def delta_e_fashion_score(delta_e, ideal=20, width=10):
+    """
+    delta_e: 実測値
+    ideal: 最も調和が取れると考えるΔEの値（15〜25が目安）
+    width: 幅が広いほど、許容される色差の範囲が広くなる（標準偏差に相当）
+    """
+    score = math.exp(-((delta_e - ideal) ** 2) / (2 * width ** 2)) * 100
+    return round(score, 1)
+
+
+
+
 
 @app.post("/")
 def get_bottom_with_delta(coordinate:Coordinate):
@@ -85,7 +163,10 @@ def get_bottom_with_delta(coordinate:Coordinate):
     bottom_rgb = coordinate.bottoms
     recommend_bottom_rgb = find_bottom_rgb(top_rgb,target_delta_e = 25)
     actual_delta = delta_e(rgb_to_lab(np.array(top_rgb)),rgb_to_lab(bottom_rgb))
-    return {"result":recommend_bottom_rgb}
+    degree_of_harmony = evaluate_color_pair(rgb_to_lab(np.array(top_rgb)),rgb_to_lab(bottom_rgb))
+    return {"result": round(actual_delta,2),
+            "harmony":degree_of_harmony
+    }
     # return {
     #     "top_rgb":top_rgb,
     #     "bottom_rgb":bottom_rgb,
