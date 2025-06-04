@@ -24,13 +24,17 @@ class Coordinate(BaseModel):
     bottoms: list[int]
 
 def rgb_to_lab(rgb):
+    r_normalized = rgb[0] / 255.0
+    g_normalized = rgb[1] / 255.0
+    b_normalized = rgb[2] / 255.0
+    
     #RGB値をリニアRGB値に変換する関数
     def gamma_correct(c):
         return c/12.92 if c <= 0.04045 else ((c+0.055)/1.055)**2.4
 
-    r_top = gamma_correct(rgb[0])
-    g_top = gamma_correct(rgb[1])
-    b_top = gamma_correct(rgb[2])
+    r_top = gamma_correct(r_normalized)
+    g_top = gamma_correct(g_normalized)
+    b_top = gamma_correct(b_normalized)
     
     
     #リニアRGB値をXYZ値に変換する
@@ -85,7 +89,7 @@ def get_bottom_with_delta(coordinate:Coordinate):
     bottom_rgb = coordinate.bottoms
     recommend_bottom_rgb = find_bottom_rgb(top_rgb,target_delta_e = 25)
     actual_delta = delta_e(rgb_to_lab(np.array(top_rgb)),rgb_to_lab(bottom_rgb))
-    return {"result":recommend_bottom_rgb}
+    return {"result": actual_delta}
     # return {
     #     "top_rgb":top_rgb,
     #     "bottom_rgb":bottom_rgb,
