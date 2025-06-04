@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from scipy.optimize import minimize
+from enum import Enum
 import numpy as np
 import colorsys
 import math
@@ -25,49 +26,57 @@ class Coordinate(BaseModel):
     tops: list[int]
     bottoms: list[int]
 
+
+class CommentModel(str, Enum):
+    SUBDUED = "控えめな印象です"
+    BALANCED = "調和のとれたコーデです"
+    FANCY = "ポップで派手な印象です"
+    UNBALANCED = "アンバランスな印象です"
+
+
 def rgb_to_lab(rgb):
     r_normalized = rgb[0] / 255.0
     g_normalized = rgb[1] / 255.0
     b_normalized = rgb[2] / 255.0
-    
-    #RGB値をリニアRGB値に変換する関数
+
+    # RGB値をリニアRGB値に変換する関数
     def gamma_correct(c):
-        return c/12.92 if c <= 0.04045 else ((c+0.055)/1.055)**2.4
+        return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
 
     r_top = gamma_correct(r_normalized)
     g_top = gamma_correct(g_normalized)
     b_top = gamma_correct(b_normalized)
-    
-    
-    #リニアRGB値をXYZ値に変換する
-    X_t = 0.4124*r_top + 0.3576*g_top + 0.1805*b_top
-    Y_t = 0.2126*r_top + 0.7152*g_top + 0.0722*b_top
-    Z_t = 0.0193*r_top + 0.1192*g_top + 0.9505*b_top
 
-    #XYZ値をLab値に変換する
-    #定数の定義
+    # リニアRGB値をXYZ値に変換する
+    X_t = 0.4124 * r_top + 0.3576 * g_top + 0.1805 * b_top
+    Y_t = 0.2126 * r_top + 0.7152 * g_top + 0.0722 * b_top
+    Z_t = 0.0193 * r_top + 0.1192 * g_top + 0.9505 * b_top
+
+    # XYZ値をLab値に変換する
+    # 定数の定義
     Xn = 0.9505
     Yn = 1.0000
     Zn = 1.0890
 
-    delta = 6/29
+    delta = 6 / 29
     delta3 = delta**3
-    inv_3delta2 = 1/(3*delta**2)
-    #XYZ値をLab値に変換する関数の定義
+    inv_3delta2 = 1 / (3 * delta**2)
+
+    # XYZ値をLab値に変換する関数の定義
     def f(t):
         if t > delta3:
-            return t**(1/3)
+            return t ** (1 / 3)
         else:
             return t * inv_3delta2 + 4 / 29
-    
-    fx = f(X_t/Xn)
-    fy = f(Y_t/Yn)
-    fz = f(Z_t/Zn)
 
-    #topのLabを算出
+    fx = f(X_t / Xn)
+    fy = f(Y_t / Yn)
+    fz = f(Z_t / Zn)
+
+    # topのLabを算出
     L_top = 116 * fy - 16
-    a_top = 500 * (fx-fy)
-    b_top = 200 * (fy-fz)
+    a_top = 500 * (fx - fy)
+    b_top = 200 * (fy - fz)
     return np.array([L_top, a_top, b_top])
 #topとbottomのLabからdelta_e（色差）を算出
 def delta_e(lab1,lab2):
@@ -85,6 +94,7 @@ def find_bottom_rgb(top_rgb,target_delta_e=25):
 
         res = minimize(objective, x0=[128, 128, 128], bounds=[(0, 255)]*3)
         return np.clip(res.x.round(), 0, 255).astype(int).tolist()
+
 #rgbからhslに変換
 def rgb_to_hsl(rgb):
     r, g, b = [x / 255.0 for x in rgb]
@@ -158,14 +168,24 @@ def delta_e_fashion_score(delta_e, ideal=20, width=10):
 
 
 @app.post("/")
-def get_bottom_with_delta(coordinate:Coordinate):
+def get_bottom_with_delta(coordinate: Coordinate):
     top_rgb = coordinate.tops
     bottom_rgb = coordinate.bottoms
     recommend_bottom_rgb = find_bottom_rgb(top_rgb,target_delta_e = 25)
     actual_delta = delta_e(rgb_to_lab(np.array(top_rgb)),rgb_to_lab(bottom_rgb))
     degree_of_harmony = evaluate_color_pair(rgb_to_lab(np.array(top_rgb)),rgb_to_lab(bottom_rgb))
-    return {"result": round(actual_delta,2),
-            "harmony":degree_of_harmony
+    if actual_delta < 10:
+        comment = CommentModel.SUBDUED
+    elif actual_delta < 25:
+        comment = CommentModel.BALANCED
+    elif actual_delta < 50:
+        comment = CommentModel.FANCY
+    else:
+        comment = CommentModel.UNBALANCED
+
+    return {"score": round(actual_delta,2),
+            "harmony":degree_of_harmony,
+            "comment": comment
     }
     # return {
     #     "top_rgb":top_rgb,
