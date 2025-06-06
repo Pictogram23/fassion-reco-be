@@ -97,8 +97,9 @@ def find_bottom_rgb(top_rgb,target_delta_e=25):
 
 #rgbからhslに変換
 def rgb_to_hsl(rgb):
-    r, g, b = [x / 255.0 for x in rgb]
+    r, g, b = [x / 255.0 for x in rgb[:3]] 
     h, l, s = colorsys.rgb_to_hls(r, g, b)
+    
     return (h * 360, s, l)  # 色相を0-360度に変換
 
 #色相の関係から「組み合わせタイプ」を分類する
@@ -138,6 +139,16 @@ def brightness_contrast_penalty(l1, l2, s1, s2):
     saturation_diff = abs(s1 - s2)
     penalty = (brightness_diff + saturation_diff) * 30  # 最大30点引き
     return penalty
+
+def delta_e_fashion_score(delta_e, ideal=20, width=10):
+    """
+    delta_e: 実測値
+    ideal: 最も調和が取れると考えるΔEの値（15〜25が目安）
+    width: 幅が広いほど、許容される色差の範囲が広くなる（標準偏差に相当）
+    """
+    score = math.exp(-((delta_e - ideal) ** 2) / (2 * width ** 2)) * 100
+    return round(score, 1)
+    
 def evaluate_color_pair(rgb1, rgb2):
     # ΔEスコア（おしゃれ評価型）
     delta = delta_e(rgb1, rgb2)
@@ -152,16 +163,20 @@ def evaluate_color_pair(rgb1, rgb2):
     harmony_score = max(0, base_harmony - penalty)
 
     final_score = round(0.4 * delta_score + 0.6 * harmony_score, 1)
-    return final_score
+    return final_score,harmony_score,delta_score
 
-def delta_e_fashion_score(delta_e, ideal=20, width=10):
-    """
-    delta_e: 実測値
-    ideal: 最も調和が取れると考えるΔEの値（15〜25が目安）
-    width: 幅が広いほど、許容される色差の範囲が広くなる（標準偏差に相当）
-    """
-    score = math.exp(-((delta_e - ideal) ** 2) / (2 * width ** 2)) * 100
-    return round(score, 1)
+
+
+#逆算HSLからRGB
+def hsl_to_rgb(h, s, l):
+    h = h / 360  # colorsysはhを0〜1で受け取る
+    r, g, b = colorsys.hls_to_rgb(h, l, s)
+    return [round(x * 255) for x in (r, g, b)]
+
+def suggest_bottom_color(top_rgb):
+    h, s, l = rgb_to_hsl(top_rgb)
+    suggested_h = (h + 30) % 360  #analogousになるような色を提案
+    return hsl_to_rgb(suggested_h, s, l)
 
 
 
@@ -171,9 +186,11 @@ def delta_e_fashion_score(delta_e, ideal=20, width=10):
 def get_bottom_with_delta(coordinate: Coordinate):
     top_rgb = coordinate.tops
     bottom_rgb = coordinate.bottoms
-    recommend_bottom_rgb = find_bottom_rgb(top_rgb,target_delta_e = 25)
+    recommend_bottom_rgb1 = find_bottom_rgb(top_rgb,target_delta_e = 25)
+    recommend_bottom_rgb2 = suggest_bottom_color(top_rgb)
     actual_delta = delta_e(rgb_to_lab(np.array(top_rgb)),rgb_to_lab(bottom_rgb))
-    degree_of_harmony = evaluate_color_pair(rgb_to_lab(np.array(top_rgb)),rgb_to_lab(bottom_rgb))
+    actual_score,degree_of_harmony,delta_score = evaluate_color_pair(rgb_to_lab(np.array(top_rgb)),rgb_to_lab(bottom_rgb))
+
     if actual_delta < 10:
         comment = CommentModel.SUBDUED
     elif actual_delta < 25:
@@ -183,17 +200,12 @@ def get_bottom_with_delta(coordinate: Coordinate):
     else:
         comment = CommentModel.UNBALANCED
 
-    return {"score": round(actual_delta,2),
-            "harmony":degree_of_harmony,
-            "comment": comment
+    return {"actual_score":actual_score,
+            "comment": comment,
+            "recommend1":recommend_bottom_rgb1,
+            "recommend2":recommend_bottom_rgb2
+            
     }
-    # return {
-    #     "top_rgb":top_rgb,
-    #     "bottom_rgb":bottom_rgb,
-    #     "recommend_bottom_rgb":recommend_bottom_rgb,
-    #     "delta_E":round(actual_delta,3),
-    #     "difference_from_25":round(abs(actual_delta-25),3)
-    # }
 
-    
+
    
