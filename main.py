@@ -107,6 +107,19 @@ def get_hue_difference(h1, h2):
     return min(diff, 360 - diff)
 
 
+
+# --- 色相スコア（補色でも評価） ---
+def get_hue_similarity_score(hue_diff):
+    if hue_diff < 30:
+        return 100  # アナログ配色
+    elif 150 <= hue_diff <= 210:
+        return 90   # 補色配色も評価
+    elif abs(hue_diff - 120) < 20:
+        return 75   # 三分割（トライアド）
+    else:
+        return max(30, 100 - (hue_diff / 180) * 100)
+
+
 #明度の評価。 標準偏差と範囲のバランスでスコア化。緩やかな変化を高評価
 def lightness_gradient_score(rgb1, rgb2):
     # Lab色空間に変換
@@ -115,9 +128,9 @@ def lightness_gradient_score(rgb1, rgb2):
     std = np.std([l1, l2])
     rng = abs(l1 - l2)
     # 標準偏差スコアは中心値30±10に設定（±20だと評価が緩すぎる）
-    std_score = math.exp(-((std - 15) ** 2) / (2 * 10 ** 2))  # L*差ベースで15が中心
+    std_score = math.exp(-((std - 20) ** 2) / (2 * 12 ** 2))  # L*差ベースで20が中心
     # 明度差の評価：rangeが20〜50なら高評価（中心35）
-    range_score = math.exp(-((rng - 35) ** 2) / (2 * 10 ** 2))  # 中心35, σ=10
+    range_score = math.exp(-((rng - 50) ** 2) / (2 * 15 ** 2))  # 中心50, σ=15
     return 50 * std_score + 50 * range_score
 
 
@@ -149,25 +162,42 @@ def seasonal_bonus(rgb, season):
 
     
 
-def evaluate_color_pair(rgb1, rgb2,season=None):
-    # ΔEスコア（おしゃれ評価型）
+def evaluate_color_pair(rgb1, rgb2, season=None):
     lab1 = rgb_to_lab(rgb1)
     lab2 = rgb_to_lab(rgb2)
-    delta = delta_e(rgb1, rgb2)
-    delta_score = delta_e_fashion_score(delta, ideal=25, width=20)  # 正規分布型
-    # HSL調和スコア
+    delta = delta_e(lab1, lab2)
+    delta_score = delta_e_fashion_score(delta, ideal=25, width=20)
+
     h1, s1, l1 = rgb_to_hsl(rgb1)
     h2, s2, l2 = rgb_to_hsl(rgb2)
     hue_diff = get_hue_difference(h1, h2)
-    hue_similarity_score = (1 - hue_diff / 180) * 100
-    lightness_score = lightness_gradient_score(l1, l2)
+    hue_score = get_hue_similarity_score(hue_diff)
+    light_score = lightness_gradient_score(rgb1, rgb2)
 
-    base_score = 0.43 * delta_score + 0.33 * hue_similarity_score + 0.24 * lightness_score
+    base_score = round(
+        0.4 * delta_score + 0.4 * hue_score + 0.2 * light_score,
+        1
+    )
+
     bonus = 0
     if season:
         bonus += seasonal_bonus(rgb1, season)
         bonus += seasonal_bonus(rgb2, season)
-    return round(base_score + bonus, 1), bonus
+
+    total_score = round(base_score + bonus, 1)
+
+    return {
+        "delta": delta,
+        "delta_score": delta_score,
+        "hue_diff": hue_diff,
+        "hue_score": hue_score,
+        "light_score": light_score,
+        "base_score": base_score,
+        "season_bonus": bonus,
+        "total_score": total_score,
+        "bonus":bonus
+    }
+
 
 def recommend_best_rgb(suggest_rgb):
     best_score = -float("inf")
@@ -176,7 +206,8 @@ def recommend_best_rgb(suggest_rgb):
     for r in range(0, 256, 32):
         for g in range(0, 256, 32):
             for b in range(0, 256, 32):
-                score, _ = evaluate_color_pair(suggest_rgb, [r, g, b])
+                score_data = evaluate_color_pair(suggest_rgb, [r, g, b])
+                score = score_data["total_score"]
                 if score > best_score:
                     best_score = score
                     best_rgb = [r, g, b]
@@ -187,31 +218,35 @@ def get_bottom_with_delta(coordinate: Coordinate):
     top_rgb = coordinate.tops[:3]
     bottom_rgb = coordinate.bottoms[:3]
     season = coordinate.season
+
     recommend_top_rgb = recommend_best_rgb(top_rgb)
     recommend_bottom_rgb = recommend_best_rgb(bottom_rgb)
-    actual_delta = delta_e(rgb_to_lab(np.array(top_rgb)),rgb_to_lab(bottom_rgb))
-    actual_score, seasonal_bonus_score = evaluate_color_pair(np.array(top_rgb), np.array(bottom_rgb), season)
+    score_data = evaluate_color_pair(np.array(top_rgb), np.array(bottom_rgb), season)
 
 
 
-    if actual_delta < 10:
+    if score_data["delta"] < 10:
         comment = CommentModel.SUBDUED
-    elif actual_delta < 25:
+    elif score_data["delta"] < 25:
         comment = CommentModel.BALANCED
-    elif actual_delta < 50:
+    elif score_data["delta"] < 50:
         comment = CommentModel.FANCY
     else:
         comment = CommentModel.UNBALANCED
-
     return {
-        "result": 100,
         "recommend_top": recommend_top_rgb,
         "recommend_bottom": recommend_bottom_rgb,
+        "ΔE": round(score_data["delta"], 2),
+        "ΔEスコア": score_data["delta_score"],
+        "色相差": round(score_data["hue_diff"], 1),
+        "色相スコア": round(score_data["hue_score"], 1),
+        "明度スコア": round(score_data["light_score"], 1),
+        "最終スコア": score_data["base_score"],
+        "season_bonus": score_data["season_bonus"],
+        "総合スコア": score_data["total_score"],
         "comment": comment,
-        "actual_score": actual_score,
-        "seasonal_bonus": seasonal_bonus_score
+        "season_bonus":score_data["bonus"]
     }
-
 
 
    
