@@ -6,6 +6,8 @@ from enum import Enum
 import numpy as np
 import colorsys
 import math
+from typing import Optional
+
 
 app = FastAPI()
 
@@ -25,6 +27,8 @@ app.add_middleware(
 class Coordinate(BaseModel):
     tops: list[int]
     bottoms: list[int]
+    season: Optional[str] = None
+
 
 
 class CommentModel(str, Enum):
@@ -35,6 +39,12 @@ class CommentModel(str, Enum):
 
 
 def rgb_to_lab(rgb):
+    
+    if isinstance(rgb, (float, int)):
+        rgb = [rgb, rgb, rgb]
+
+    rgb = list(rgb[:3]) 
+
     r_normalized = rgb[0] / 255.0
     g_normalized = rgb[1] / 255.0
     b_normalized = rgb[2] / 255.0
@@ -79,68 +89,39 @@ def rgb_to_lab(rgb):
     b_top = 200 * (fy - fz)
     return np.array([L_top, a_top, b_top])
 #topとbottomのLabからdelta_e（色差）を算出
-def delta_e(lab1,lab2):
-    delta_E = np.linalg.norm(lab1-lab2) 
-    return delta_E
+def delta_e(lab1, lab2):
+    lab1 = np.array(lab1)  # 💡ここが大事！
+    lab2 = np.array(lab2)
+    return np.linalg.norm(lab1 - lab2)
 
-#topから適したbottomを計算
-def find_bottom_rgb(top_rgb,target_delta_e=25):
-        top_lab = rgb_to_lab(np.array(top_rgb))
-        #色差が２５に近くなるようなbottomを出す関数
-        def objective(bottom_rgb):
-            bottom_rgb = np.clip(bottom_rgb,0,255)
-            bottom_lab = rgb_to_lab(bottom_rgb)
-            return abs(delta_e(top_lab,bottom_lab)-target_delta_e)
 
-        res = minimize(objective, x0=[128, 128, 128], bounds=[(0, 255)]*3)
-        return np.clip(res.x.round(), 0, 255).astype(int).tolist()
 
 #rgbからhslに変換
 def rgb_to_hsl(rgb):
     r, g, b = [x / 255.0 for x in rgb[:3]] 
     h, l, s = colorsys.rgb_to_hls(r, g, b)
-    
     return (h * 360, s, l)  # 色相を0-360度に変換
-
-#色相の関係から「組み合わせタイプ」を分類する
 
 def get_hue_difference(h1, h2):
     diff = abs(h1 - h2)
     return min(diff, 360 - diff)
 
-def determine_harmony_type(h1, h2):
-    diff = get_hue_difference(h1, h2)
-    if diff < 15:
-        #落ち着いた印象
-        return "monochrome"
-    elif diff <= 30:
-        #自然な一体感がある
-        return "analogous"
-    elif 150 <= diff <= 210:
-        #対比が強くてインパクト大
-        return "complementary"
-    elif abs(h1 - h2) % 120 < 15:
-        #多色でもバランスよい
-        return "triadic"
-    else:
-        return "neutral"
 
-        #調和タイプ別スコア
-harmony_scores = {
-    "monochrome": 85,
-    "analogous": 90,
-    "complementary": 75,
-    "triadic": 80,
-    "neutral": 60
-}
-# 彩度・明度のバランス評価（差が大きいと減点）
-def brightness_contrast_penalty(l1, l2, s1, s2):
-    brightness_diff = abs(l1 - l2)
-    saturation_diff = abs(s1 - s2)
-    penalty = (brightness_diff + saturation_diff) * 30  # 最大30点引き
-    return penalty
+#明度の評価。 標準偏差と範囲のバランスでスコア化。緩やかな変化を高評価
+def lightness_gradient_score(rgb1, rgb2):
+    # Lab色空間に変換
+    l1 = rgb_to_lab(rgb1)[0] * 100  # L*値に換算（正規化されていないと仮定）
+    l2 = rgb_to_lab(rgb2)[0] * 100
+    std = np.std([l1, l2])
+    rng = abs(l1 - l2)
+    # 標準偏差スコアは中心値30±10に設定（±20だと評価が緩すぎる）
+    std_score = math.exp(-((std - 15) ** 2) / (2 * 10 ** 2))  # L*差ベースで15が中心
+    # 明度差の評価：rangeが20〜50なら高評価（中心35）
+    range_score = math.exp(-((rng - 35) ** 2) / (2 * 10 ** 2))  # 中心35, σ=10
+    return 50 * std_score + 50 * range_score
 
-def delta_e_fashion_score(delta_e, ideal=20, width=10):
+
+def delta_e_fashion_score(delta_e, ideal=25, width=15):
     """
     delta_e: 実測値
     ideal: 最も調和が取れると考えるΔEの値（15〜25が目安）
@@ -148,48 +129,70 @@ def delta_e_fashion_score(delta_e, ideal=20, width=10):
     """
     score = math.exp(-((delta_e - ideal) ** 2) / (2 * width ** 2)) * 100
     return round(score, 1)
-    
-def evaluate_color_pair(rgb1, rgb2):
-    # ΔEスコア（おしゃれ評価型）
-    delta = delta_e(rgb1, rgb2)
-    delta_score = delta_e_fashion_score(delta, ideal=20, width=10)  # 正規分布型
 
+#季節ボーナス
+def seasonal_bonus(rgb, season):
+    h, s, l = rgb_to_hsl(rgb)
+    if season == "spring":
+        if 30 <= h <= 120 and s >= 0.4 and l >= 0.5:
+            return 10
+    elif season == "summer":
+        if 180 <= h <= 300 and s <= 0.6 and l >= 0.5:
+            return 10
+    elif season == "autumn":
+        if 20 <= h <= 60 and 0.3 <= s <= 0.7 and 0.3 <= l <= 0.7:
+            return 10
+    elif season == "winter":
+        if (h >= 240 or h <= 30) and s >= 0.6 and l <= 0.6:
+            return 10
+    return 0
+
+    
+
+def evaluate_color_pair(rgb1, rgb2,season=None):
+    # ΔEスコア（おしゃれ評価型）
+    lab1 = rgb_to_lab(rgb1)
+    lab2 = rgb_to_lab(rgb2)
+    delta = delta_e(rgb1, rgb2)
+    delta_score = delta_e_fashion_score(delta, ideal=25, width=20)  # 正規分布型
     # HSL調和スコア
     h1, s1, l1 = rgb_to_hsl(rgb1)
     h2, s2, l2 = rgb_to_hsl(rgb2)
-    harmony_type = determine_harmony_type(h1, h2)
-    base_harmony = harmony_scores[harmony_type]
-    penalty = brightness_contrast_penalty(l1, l2, s1, s2)
-    harmony_score = max(0, base_harmony - penalty)
+    hue_diff = get_hue_difference(h1, h2)
+    hue_similarity_score = (1 - hue_diff / 180) * 100
+    lightness_score = lightness_gradient_score(l1, l2)
 
-    final_score = round(0.4 * delta_score + 0.6 * harmony_score, 1)
-    return final_score,harmony_score,delta_score
+    base_score = 0.43 * delta_score + 0.33 * hue_similarity_score + 0.24 * lightness_score
+    bonus = 0
+    if season:
+        bonus += seasonal_bonus(rgb1, season)
+        bonus += seasonal_bonus(rgb2, season)
+    return round(base_score + bonus, 1), bonus
 
+def recommend_best_rgb(suggest_rgb):
+    best_score = -float("inf")
+    best_rgb = None
 
-
-#逆算HSLからRGB
-def hsl_to_rgb(h, s, l):
-    h = h / 360  # colorsysはhを0〜1で受け取る
-    r, g, b = colorsys.hls_to_rgb(h, l, s)
-    return [round(x * 255) for x in (r, g, b)]
-
-def suggest_bottom_color(top_rgb):
-    h, s, l = rgb_to_hsl(top_rgb)
-    suggested_h = (h + 30) % 360  #analogousになるような色を提案
-    return hsl_to_rgb(suggested_h, s, l)
-
-
-
-
+    for r in range(0, 256, 32):
+        for g in range(0, 256, 32):
+            for b in range(0, 256, 32):
+                score, _ = evaluate_color_pair(suggest_rgb, [r, g, b])
+                if score > best_score:
+                    best_score = score
+                    best_rgb = [r, g, b]
+    return best_rgb
 
 @app.post("/")
 def get_bottom_with_delta(coordinate: Coordinate):
-    top_rgb = coordinate.tops
-    bottom_rgb = coordinate.bottoms
-    recommend_bottom_rgb1 = find_bottom_rgb(top_rgb,target_delta_e = 25)
-    recommend_bottom_rgb2 = suggest_bottom_color(top_rgb)
+    top_rgb = coordinate.tops[:3]
+    bottom_rgb = coordinate.bottoms[:3]
+    season = coordinate.season
+    recommend_top_rgb = recommend_best_rgb(top_rgb)
+    recommend_bottom_rgb = recommend_best_rgb(bottom_rgb)
     actual_delta = delta_e(rgb_to_lab(np.array(top_rgb)),rgb_to_lab(bottom_rgb))
-    actual_score,degree_of_harmony,delta_score = evaluate_color_pair(rgb_to_lab(np.array(top_rgb)),rgb_to_lab(bottom_rgb))
+    actual_score, seasonal_bonus_score = evaluate_color_pair(np.array(top_rgb), np.array(bottom_rgb), season)
+
+
 
     if actual_delta < 10:
         comment = CommentModel.SUBDUED
@@ -200,12 +203,15 @@ def get_bottom_with_delta(coordinate: Coordinate):
     else:
         comment = CommentModel.UNBALANCED
 
-    return {"actual_score":actual_score,
-            "comment": comment,
-            "recommend1":recommend_bottom_rgb1,
-            "recommend2":recommend_bottom_rgb2
-            
+    return {
+        "result": 100,
+        "recommend_top": recommend_top_rgb,
+        "recommend_bottom": recommend_bottom_rgb,
+        "comment": comment,
+        "actual_score": actual_score,
+        "seasonal_bonus": seasonal_bonus_score
     }
+
 
 
    
