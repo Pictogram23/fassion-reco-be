@@ -14,7 +14,8 @@ app = FastAPI()
 origins = [
     "http://localhost:3000",
     "http://localhost:8080",
-    "http://153.121.51.21"
+    "https://153.121.51.21",
+    "https://iroca.ddns.net"
 ]
 
 app.add_middleware(
