@@ -243,7 +243,7 @@ def get_bottom_with_delta(coordinate: Coordinate):
         "明度スコア": round(score_data["light_score"], 1),
         "最終スコア": score_data["base_score"],
         "season_bonus": score_data["season_bonus"],
-        "総合スコア": score_data["total_score"],
+        "total_score": score_data["total_score"],
         "comment": comment,
         "season_bonus":score_data["bonus"]
     }
