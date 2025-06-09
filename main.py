@@ -117,7 +117,7 @@ def get_hue_similarity_score(hue_diff):
     elif abs(hue_diff - 120) < 20:
         return 75   # 三分割（トライアド）
     else:
-        return max(30, 100 - (hue_diff / 180) * 100)
+        return max(0, 100 - (hue_diff / 180) * 100)
 
 
 #明度の評価。 標準偏差と範囲のバランスでスコア化。緩やかな変化を高評価
@@ -213,7 +213,7 @@ def recommend_best_rgb(suggest_rgb):
                     best_rgb = [r, g, b]
     return best_rgb
 
-@app.post("/")
+@app.post("/api/")
 def get_bottom_with_delta(coordinate: Coordinate):
     top_rgb = coordinate.tops[:3]
     bottom_rgb = coordinate.bottoms[:3]
