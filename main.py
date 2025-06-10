@@ -32,10 +32,10 @@ class Coordinate(BaseModel):
 
 
 class CommentModel(str, Enum):
-    SUBDUED = "控えめな印象です"
-    BALANCED = "調和のとれたコーデです"
-    FANCY = "ポップで派手な印象です"
-    UNBALANCED = "アンバランスな印象です"
+    SUBDUED = "落ち着いたトーンで統一感があり、洗練された印象を与えます。色の差が小さいため、コーデ全体が自然にまとまっています。"
+    BALANCED = "色のコントラストが程よく効いていて、バランスの取れたコーディネートです。違和感がなく、印象に残る配色になっています。"
+    FANCY = "色同士のコントラストが強く、インパクトのあるスタイリングです。大胆な配色で個性を演出しています。"
+    UNBALANCED = "アイテム同士の色味にややズレがあり、少し不自然に見えるかもしれません。"
 
 
 def rgb_to_lab(rgb):
@@ -110,14 +110,14 @@ def get_hue_difference(h1, h2):
 
 # --- 色相スコア（補色でも評価） ---
 def get_hue_similarity_score(hue_diff):
-    if hue_diff < 30:
+    if hue_diff <= 30:
         return 100  # アナログ配色
-    elif 150 <= hue_diff <= 210:
+    elif 150 <= hue_diff <= 180:
         return 90   # 補色配色も評価
-    elif abs(hue_diff - 120) < 20:
-        return 75   # 三分割（トライアド）
+    elif 120 <= hue_diff < 150:
+        return 80
     else:
-        return max(0, 100 - (hue_diff / 180) * 100)
+        return round(max(0, (hue_diff / 180) * 100),1)
 
 
 #明度の評価。 標準偏差と範囲のバランスでスコア化。緩やかな変化を高評価
@@ -132,6 +132,11 @@ def lightness_gradient_score(rgb1, rgb2):
     # 明度差の評価：rangeが20〜50なら高評価（中心35）
     range_score = math.exp(-((rng - 50) ** 2) / (2 * 15 ** 2))  # 中心50, σ=15
     return 50 * std_score + 50 * range_score
+
+#彩度差の導入
+def chroma_similarity_score(s1, s2):
+    diff = abs(s1 - s2)
+    return max(0, 100 - diff * 100)
 
 
 def delta_e_fashion_score(delta_e, ideal=25, width=15):
@@ -173,9 +178,11 @@ def evaluate_color_pair(rgb1, rgb2, season=None):
     hue_diff = get_hue_difference(h1, h2)
     hue_score = get_hue_similarity_score(hue_diff)
     light_score = lightness_gradient_score(rgb1, rgb2)
+    saturation_score = chroma_similarity_score(s1,s2)
+
 
     base_score = round(
-        0.4 * delta_score + 0.4 * hue_score + 0.2 * light_score,
+         0.50 * delta_score + 0.25 * hue_score + 0.20 * light_score + 0.05 * saturation_score,
         1
     )
 
@@ -195,7 +202,8 @@ def evaluate_color_pair(rgb1, rgb2, season=None):
         "base_score": base_score,
         "season_bonus": bonus,
         "total_score": total_score,
-        "bonus":bonus
+        "bonus":bonus,
+        "a":saturation_score
     }
 
 
@@ -203,9 +211,9 @@ def recommend_best_rgb(suggest_rgb):
     best_score = -float("inf")
     best_rgb = None
 
-    for r in range(0, 256, 32):
-        for g in range(0, 256, 32):
-            for b in range(0, 256, 32):
+    for r in range(0, 256, 16):
+        for g in range(0, 256, 16):
+            for b in range(0, 256, 16):
                 score_data = evaluate_color_pair(suggest_rgb, [r, g, b])
                 score = score_data["total_score"]
                 if score > best_score:
@@ -213,7 +221,7 @@ def recommend_best_rgb(suggest_rgb):
                     best_rgb = [r, g, b]
     return best_rgb
 
-@app.post("/api/")
+@app.post("/")
 def get_bottom_with_delta(coordinate: Coordinate):
     top_rgb = coordinate.tops[:3]
     bottom_rgb = coordinate.bottoms[:3]
@@ -243,9 +251,8 @@ def get_bottom_with_delta(coordinate: Coordinate):
         "明度スコア": round(score_data["light_score"], 1),
         "最終スコア": score_data["base_score"],
         "season_bonus": score_data["season_bonus"],
-        "total_score": score_data["total_score"],
-        "comment": comment,
-        "season_bonus":score_data["bonus"]
+        "total_score": score_data["total_score"],#total_score
+        "comment": comment
     }
 
 
