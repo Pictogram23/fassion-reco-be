@@ -13,6 +13,8 @@ app = FastAPI()
 
 origins = [
     "http://localhost:3000",
+    "http://localhost:8080",
+    "http://153.121.51.21"
 ]
 
 app.add_middleware(
@@ -221,7 +223,11 @@ def recommend_best_rgb(suggest_rgb):
                     best_rgb = [r, g, b]
     return best_rgb
 
-@app.post("/")
+@app.get("/api/")
+def read_root():
+    return {"message": "Hello, this is Color Recommendation API"}
+
+@app.post("/api/")
 def get_bottom_with_delta(coordinate: Coordinate):
     top_rgb = coordinate.tops[:3]
     bottom_rgb = coordinate.bottoms[:3]
