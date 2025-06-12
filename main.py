@@ -136,7 +136,15 @@ def lightness_gradient_score(rgb1, rgb2):
 #彩度差の導入
 def chroma_similarity_score(s1, s2):
     diff = abs(s1 - s2)
-    return max(0, 100 - diff * 100)
+    similarity_score = (1 - diff) * 50  # 最大50点
+
+    avg_chroma = (s1 + s2) / 2
+    extremeness_score = abs(avg_chroma - 0.5) * 2 * 50  # 最大50点
+
+    score = similarity_score + extremeness_score
+    return round(score, 1)
+
+
 
 
 def delta_e_fashion_score(delta_e, ideal=25, width=15):
