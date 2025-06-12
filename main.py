@@ -153,16 +153,16 @@ def seasonal_bonus(rgb, season):
     h, s, l = rgb_to_hsl(rgb)
     if season == "spring":
         if 30 <= h <= 120 and s >= 0.4 and l >= 0.5:
-            return 10
+            return 5
     elif season == "summer":
         if 180 <= h <= 300 and s <= 0.6 and l >= 0.5:
-            return 10
+            return 5
     elif season == "autumn":
         if 20 <= h <= 60 and 0.3 <= s <= 0.7 and 0.3 <= l <= 0.7:
-            return 10
+            return 5
     elif season == "winter":
         if (h >= 240 or h <= 30) and s >= 0.6 and l <= 0.6:
-            return 10
+            return 5
     return 0
 
     
