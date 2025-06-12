@@ -90,7 +90,7 @@ def rgb_to_lab(rgb):
     return np.array([L_top, a_top, b_top])
 #topとbottomのLabからdelta_e（色差）を算出
 def delta_e(lab1, lab2):
-    lab1 = np.array(lab1)  # 💡ここが大事！
+    lab1 = np.array(lab1)  
     lab2 = np.array(lab2)
     return np.linalg.norm(lab1 - lab2)
 
@@ -123,8 +123,8 @@ def get_hue_similarity_score(hue_diff):
 #明度の評価。 標準偏差と範囲のバランスでスコア化。緩やかな変化を高評価
 def lightness_gradient_score(rgb1, rgb2):
     # Lab色空間に変換
-    l1 = rgb_to_lab(rgb1)[0] * 100  # L*値に換算（正規化されていないと仮定）
-    l2 = rgb_to_lab(rgb2)[0] * 100
+    l1 = rgb_to_lab(rgb1)[0]
+    l2 = rgb_to_lab(rgb2)[0]
     std = np.std([l1, l2])
     rng = abs(l1 - l2)
     # 標準偏差スコアは中心値30±10に設定（±20だと評価が緩すぎる）
