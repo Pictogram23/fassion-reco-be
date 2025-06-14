@@ -93,7 +93,7 @@ def rgb_to_lab(rgb):
     return np.array([L_top, a_top, b_top])
 #topとbottomのLabからdelta_e（色差）を算出
 def delta_e(lab1, lab2):
-    lab1 = np.array(lab1)  # 💡ここが大事！
+    lab1 = np.array(lab1)  
     lab2 = np.array(lab2)
     return np.linalg.norm(lab1 - lab2)
 
@@ -126,8 +126,8 @@ def get_hue_similarity_score(hue_diff):
 #明度の評価。 標準偏差と範囲のバランスでスコア化。緩やかな変化を高評価
 def lightness_gradient_score(rgb1, rgb2):
     # Lab色空間に変換
-    l1 = rgb_to_lab(rgb1)[0] * 100  # L*値に換算（正規化されていないと仮定）
-    l2 = rgb_to_lab(rgb2)[0] * 100
+    l1 = rgb_to_lab(rgb1)[0]
+    l2 = rgb_to_lab(rgb2)[0]
     std = np.std([l1, l2])
     rng = abs(l1 - l2)
     # 標準偏差スコアは中心値30±10に設定（±20だと評価が緩すぎる）
@@ -139,7 +139,15 @@ def lightness_gradient_score(rgb1, rgb2):
 #彩度差の導入
 def chroma_similarity_score(s1, s2):
     diff = abs(s1 - s2)
-    return max(0, 100 - diff * 100)
+    similarity_score = (1 - diff) * 50  # 最大50点
+
+    avg_chroma = (s1 + s2) / 2
+    extremeness_score = abs(avg_chroma - 0.5) * 2 * 50  # 最大50点
+
+    score = similarity_score + extremeness_score
+    return round(score, 1)
+
+
 
 
 def delta_e_fashion_score(delta_e, ideal=25, width=15):
@@ -156,16 +164,16 @@ def seasonal_bonus(rgb, season):
     h, s, l = rgb_to_hsl(rgb)
     if season == "spring":
         if 30 <= h <= 120 and s >= 0.4 and l >= 0.5:
-            return 10
+            return 5
     elif season == "summer":
         if 180 <= h <= 300 and s <= 0.6 and l >= 0.5:
-            return 10
+            return 5
     elif season == "autumn":
         if 20 <= h <= 60 and 0.3 <= s <= 0.7 and 0.3 <= l <= 0.7:
-            return 10
+            return 5
     elif season == "winter":
         if (h >= 240 or h <= 30) and s >= 0.6 and l <= 0.6:
-            return 10
+            return 5
     return 0
 
     
